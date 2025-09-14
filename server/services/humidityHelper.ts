@@ -1,5 +1,11 @@
-// server/services/humidityHelper.ts
-export function interpretHumidity(humidity: number, date: string): { humidity: string; message: string; date: string } {
+
+interface interpretHumidityResponse {
+  humidity: string,
+  message: string,
+  date: string
+}
+
+export function interpretHumidity(humidity: number, date: string): interpretHumidityResponse {
   let message = 'Niveles adecuados de humedad para el cultivo'
   if (humidity < 30) {
     message = 'Peligro, la humedad es demasiado baja para el cultivo'
