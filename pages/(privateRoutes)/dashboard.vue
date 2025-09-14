@@ -1,12 +1,12 @@
 <template>
-  <div class="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
+  <div class="h-dvh bg-gradient-to-br p-4">
     <div class="max-w-2xl mx-auto">
       <div class="text-center mb-8">
-        <h1 class="text-4xl font-bold text-gray-900 mb-2">
-          Dashboard del Clima
+        <h1 class="text-4xl font-bold text-orange-600 dark:text-cyan-500 mb-2">
+          Consulta del clima con TerraClima
         </h1>
         <p class="text-gray-600">
-          Consulta información meteorológica utilizando OpenWeather API
+          Consulta información meteorológica utilizando un satelite sobre la tierra
         </p>
       </div>
 
@@ -22,6 +22,35 @@
         
         <CardContent>
           <form class="space-y-6" @submit="onSubmit">
+
+            <FormField name="provider">
+              <FormItem>
+                <FormLabel for="provider" class="text-sm font-medium text-gray-700">Provider</FormLabel>
+
+                <Select 
+                  :model-value="provider"
+                  @update:model-value="val => setFieldValue('provider', val != null ? String(val) : undefined)"
+                >
+                  
+                  <SelectTrigger class="w-full">
+                    <SelectValue placeholder="Select a weather provider" />
+                  </SelectTrigger>
+                  
+                  <SelectContent>
+                    <SelectGroup>
+                      <SelectItem v-for="p in providerOptions" :key="p.value" :value="p.value">
+                        {{ p.label }}
+                      </SelectItem>
+                    </SelectGroup>
+                  </SelectContent>
+                
+                </Select>
+                <p v-if="errors.provider" class="text-sm text-red-600 flex items-center gap-1">
+                  <AlertCircle class="h-3 w-3" />
+                  <FormMessage />
+                </p>
+              </FormItem>
+            </FormField>
             
             <!-- Latitud -->
             <FormField name="latitude" class="space-y-2">
@@ -146,26 +175,26 @@
           
 
             <!-- Resultado -->
-            <!-- <div v-if="weatherData" class="mt-8 p-6 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-200">
+            <div v-if="weatherData" class="mt-8 p-6 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-200">
               <h3 class="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
                 <CloudSun class="h-5 w-5 text-blue-600" />
                 Datos Meteorológicos
               </h3>
               <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
                 <div class="space-y-2">
-                  <p><span class="font-medium">Ubicación:</span> {{ weatherData.name }}</p>
+                  <!-- <p><span class="font-medium">Ubicación:</span> {{ weatherData.name }}</p>
                   <p><span class="font-medium">Temperatura:</span> {{ weatherData.main.temp }}°C</p>
-                  <p><span class="font-medium">Sensación térmica:</span> {{ weatherData.main.feels_like }}°C</p>
-                  <p><span class="font-medium">Humedad:</span> {{ weatherData.main.humidity }}%</p>
+                  <p><span class="font-medium">Sensación térmica:</span> {{ weatherData.main.feels_like }}°C</p> -->
+                  <p class="text-lg font-semibold text-gray-800"><span class="font-medium text-blue-600">Humedad:</span> {{ weatherData.humidity }}</p>
                 </div>
                 <div class="space-y-2">
-                  <p><span class="font-medium">Descripción:</span> {{ weatherData.weather[0].description }}</p>
+                  <!-- <p><span class="font-medium">Descripción:</span> {{ weatherData.weather[0].description }}</p>
                   <p><span class="font-medium">Presión:</span> {{ weatherData.main.pressure }} hPa</p>
                   <p><span class="font-medium">Viento:</span> {{ weatherData.wind.speed }} m/s</p>
-                  <p><span class="font-medium">Visibilidad:</span> {{ weatherData.visibility / 1000 }} km</p>
+                  <p><span class="font-medium">Visibilidad:</span> {{ weatherData.visibility / 1000 }} km</p> -->
                 </div>
               </div>
-            </div> -->
+            </div>
 
             <!-- Error -->
             <div v-if="apiError" class="mt-6 p-4 bg-red-50 border border-red-200 rounded-lg">
@@ -186,7 +215,6 @@
 <script setup lang="ts">
 import { DateFormatter, parseDate } from '@internationalized/date'
 import { toDate } from 'reka-ui/date'
-import { ref, computed } from 'vue'
 import { 
   MapPin, 
   CalendarIcon, 
@@ -202,7 +230,7 @@ import * as z from 'zod'
 
 definePageMeta({
   layout: 'private',
-  //middleware: ['auth'] // Asumiendo que implementarás un middleware de autenticación
+  title: 'Dashboard - TerraClima',
 })
 
 const df = new DateFormatter('en-US', {
@@ -227,19 +255,31 @@ const formSchema = toTypedSchema(z.object({
   date: z
     .string()
     .refine(v => v, { message: 'A date of birth is required.' }),
+  provider: z
+    .string()
+    .min(1, 'Please select a weather provider')
 }))
+
+// estados reactivos
+const isLoading = ref(false)
+const weatherData = ref()
+const apiError = ref('')
+const placeholder = ref()
+const providerOptions = ref<{ label: string, value: string}[]>([])
 
 const { handleSubmit, defineField, errors, values, setFieldValue } = useForm({
   validationSchema: formSchema,
   initialValues: {
     latitude: undefined,
     longitude: undefined,
-    date: undefined
+    date: undefined,
+    provider: undefined,
   }
 })
 
 const [latitude, latitudeAttrs] = defineField('latitude')
 const [longitude, longitudeAttrs] = defineField('longitude')
+const [provider] = defineField('provider')
 //const [selectedDate, dateAttrs] = defineField('date')
 
 const selectedDate = computed({
@@ -247,29 +287,49 @@ const selectedDate = computed({
   set: val => val,
 })
 
-// estados reactivos
-const isLoading = ref(false)
-const weatherData = ref(null)
-const apiError = ref('')
-const placeholder = ref()
+
+
+onMounted(async () => {
+  const { data } = await useFetch('/api/weatherProviders')
+  const options = data.value ?? []
+  providerOptions.value = options
+
+  if (options.length > 0) {
+    setFieldValue('provider', options[0].value)
+  }
+
+})
 
 // funcion para manejar el envio del formulario
 const onSubmit = handleSubmit(async (values) => {
   isLoading.value = true
   
-  setTimeout(() => {
-    toast.success('Consultando datos meteorológicos...',{
-      description: JSON.stringify({
-        latitude: values.latitude,
-        longitude: values.longitude,
-        date: values.date
-      })
-    }) 
-    
-    isLoading.value = false
-  }, 3000)
 
-  //console.log('Valores del formulario:', values)
+  // TODO: AÑADIR UN SELECTOR DE PROVEEDOR AL FORMULARIO, ARREGLAR EL MOSTRAR LOS RESULTADOS
+
+  console.log(values)
+
+  const { data, error } = await useFetch('/api/getHumidity', {
+    query: {
+      lat: values.latitude,
+      lon: values.longitude,
+      date: values.date,
+      provider: values.provider,
+    }
+  })
+
+  if (error.value) {
+    apiError.value = error.value.message || 'Error al consultar los datos meteorológicos'
+    toast.error(apiError.value)
+    isLoading.value = false
+    return
+  }
+
+  console.log(data.value)
+  weatherData.value = data.value
+
+
+  isLoading.value = false
 
 
 })
