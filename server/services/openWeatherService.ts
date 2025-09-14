@@ -6,6 +6,7 @@ export const openWeatherProvider: WeatherProvider = {
   async getHumidityReport(lat, lon, date) {
     const url = `https://api.openweathermap.org/data/3.0/onecall/day_summary?lat=${lat}&lon=${lon}&date=${date}&appid=${apiKey}&units=metric`
     const res = await fetch(url)
+    console.log(res)
     if (!res.ok) throw new Error('Error fetching OpenWeather data')
     const data = await res.json()
     const humidity =  data.main.humidity
